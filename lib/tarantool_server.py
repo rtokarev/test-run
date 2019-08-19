@@ -15,6 +15,7 @@ import yaml
 
 from gevent import socket
 from greenlet import GreenletExit
+from threading import Timer
 
 try:
     from cStringIO import StringIO
@@ -929,10 +930,14 @@ class TarantoolServer(Server):
         if self.current_test.current_test_greenlet:
             gevent.kill(self.current_test.current_test_greenlet)
 
+    def kill(self):
+        color_log('Kill process {0}\n'.format(self.process.pid))
+        self.process.kill()
+
     def wait_stop(self):
         self.process.wait()
 
-    def stop(self, silent=True, signal=signal.SIGTERM):
+    def stop(self, silent=True, signal=signal.SIGTERM, timeout=5):
         """ Kill tarantool server using specified signal (SIGTERM by default)
 
             signal - a number of a signal
@@ -965,9 +970,12 @@ class TarantoolServer(Server):
                 self.process.send_signal(signal)
             except OSError:
                 pass
+            timer = Timer(timeout, lambda server: server.kill(), [self])
+            timer.start()
             if self.crash_detector is not None:
                 save_join(self.crash_detector)
             self.wait_stop()
+            timer.cancel()
 
         self.status = None
         if re.search(r'^/', str(self._admin.port)):
